@@ -210,9 +210,129 @@ export const platformConnections = pgTable(
   ],
 );
 
-export const platformConnectionsRelations = relations(platformConnections, ({ one }) => ({
+export const platformConnectionsRelations = relations(platformConnections, ({ one, many }) => ({
   restaurant: one(restaurants, {
     fields: [platformConnections.restaurantId],
     references: [restaurants.id],
+  }),
+  syncJobs: many(syncJobs),
+  syncSnapshots: many(syncSnapshots),
+  syncHistory: many(syncHistory),
+}));
+
+// ── Sync Jobs ───────────────────────────────────────────────────────────────
+
+export const syncJobs = pgTable('sync_jobs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  connectionId: uuid('connection_id')
+    .references(() => platformConnections.id, { onDelete: 'cascade' })
+    .notNull(),
+  menuId: uuid('menu_id')
+    .references(() => menus.id, { onDelete: 'cascade' })
+    .notNull(),
+  status: text('status').default('pending').notNull(), // pending, processing, completed, failed
+  priority: integer('priority').default(0).notNull(),
+  trigger: text('trigger').default('manual').notNull(), // manual, auto, retry
+  attempt: integer('attempt').default(0).notNull(),
+  maxAttempts: integer('max_attempts').default(3).notNull(),
+  externalJobId: text('external_job_id'),
+  error: text('error'),
+  startedAt: timestamp('started_at'),
+  completedAt: timestamp('completed_at'),
+  nextRetryAt: timestamp('next_retry_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const syncJobsRelations = relations(syncJobs, ({ one }) => ({
+  connection: one(platformConnections, {
+    fields: [syncJobs.connectionId],
+    references: [platformConnections.id],
+  }),
+  menu: one(menus, {
+    fields: [syncJobs.menuId],
+    references: [menus.id],
+  }),
+}));
+
+// ── Sync Snapshots ──────────────────────────────────────────────────────────
+
+export const syncSnapshots = pgTable(
+  'sync_snapshots',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    connectionId: uuid('connection_id')
+      .references(() => platformConnections.id, { onDelete: 'cascade' })
+      .notNull(),
+    menuId: uuid('menu_id')
+      .references(() => menus.id, { onDelete: 'cascade' })
+      .notNull(),
+    snapshot: jsonb('snapshot').notNull(),
+    checksum: text('checksum').notNull(),
+    syncJobId: uuid('sync_job_id').references(() => syncJobs.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('sync_snapshots_connection_menu_idx').on(table.connectionId, table.menuId),
+  ],
+);
+
+export const syncSnapshotsRelations = relations(syncSnapshots, ({ one }) => ({
+  connection: one(platformConnections, {
+    fields: [syncSnapshots.connectionId],
+    references: [platformConnections.id],
+  }),
+  menu: one(menus, {
+    fields: [syncSnapshots.menuId],
+    references: [menus.id],
+  }),
+  syncJob: one(syncJobs, {
+    fields: [syncSnapshots.syncJobId],
+    references: [syncJobs.id],
+  }),
+}));
+
+// ── Sync History ────────────────────────────────────────────────────────────
+
+export const syncHistory = pgTable('sync_history', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  connectionId: uuid('connection_id')
+    .references(() => platformConnections.id, { onDelete: 'cascade' })
+    .notNull(),
+  menuId: uuid('menu_id')
+    .references(() => menus.id, { onDelete: 'cascade' })
+    .notNull(),
+  syncJobId: uuid('sync_job_id').references(() => syncJobs.id, { onDelete: 'set null' }),
+  status: text('status').notNull(), // success, error
+  trigger: text('trigger').default('manual').notNull(),
+  platform: text('platform').notNull(),
+  restaurantId: uuid('restaurant_id')
+    .references(() => restaurants.id, { onDelete: 'cascade' })
+    .notNull(),
+  changesSummary: jsonb('changes_summary'), // { added: N, modified: N, removed: N, details: [...] }
+  externalJobId: text('external_job_id'),
+  error: text('error'),
+  durationMs: integer('duration_ms'),
+  startedAt: timestamp('started_at').notNull(),
+  completedAt: timestamp('completed_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const syncHistoryRelations = relations(syncHistory, ({ one }) => ({
+  connection: one(platformConnections, {
+    fields: [syncHistory.connectionId],
+    references: [platformConnections.id],
+  }),
+  menu: one(menus, {
+    fields: [syncHistory.menuId],
+    references: [menus.id],
+  }),
+  restaurant: one(restaurants, {
+    fields: [syncHistory.restaurantId],
+    references: [restaurants.id],
+  }),
+  syncJob: one(syncJobs, {
+    fields: [syncHistory.syncJobId],
+    references: [syncJobs.id],
   }),
 }));
