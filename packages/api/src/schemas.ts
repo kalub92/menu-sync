@@ -99,3 +99,44 @@ export const createPlatformPricingSchema = z.object({
 export const updatePlatformPricingSchema = z.object({
   price: z.number().int().min(0),
 });
+
+// ── Platform Connections ────────────────────────────────────────────────────
+
+const doordashCredentialsSchema = z.object({
+  developerId: z.string().min(1),
+  keyId: z.string().min(1),
+  signingSecret: z.string().min(1),
+});
+
+const uberEatsCredentialsSchema = z.object({
+  clientId: z.string().min(1),
+  clientSecret: z.string().min(1),
+});
+
+export const createPlatformConnectionSchema = z
+  .object({
+    restaurantId: z.string().uuid(),
+    platform: z.enum(['doordash', 'uber_eats']),
+    externalStoreId: z.string().min(1).nullish(),
+    credentials: z.union([doordashCredentialsSchema, uberEatsCredentialsSchema]),
+    enabled: z.boolean().default(true),
+  })
+  .refine(
+    (data) => {
+      if (data.platform === 'doordash') {
+        return doordashCredentialsSchema.safeParse(data.credentials).success;
+      }
+      return uberEatsCredentialsSchema.safeParse(data.credentials).success;
+    },
+    { message: 'Credentials do not match the selected platform', path: ['credentials'] },
+  );
+
+export const updatePlatformConnectionSchema = z.object({
+  externalStoreId: z.string().min(1).nullish(),
+  credentials: z.union([doordashCredentialsSchema, uberEatsCredentialsSchema]).optional(),
+  enabled: z.boolean().optional(),
+});
+
+export const menuSyncSchema = z.object({
+  menuId: z.string().uuid(),
+});

@@ -32,6 +32,7 @@ export const restaurants = pgTable('restaurants', {
 
 export const restaurantsRelations = relations(restaurants, ({ many }) => ({
   menus: many(menus),
+  platformConnections: many(platformConnections),
 }));
 
 // ── Menus ────────────────────────────────────────────────────────────────────
@@ -179,5 +180,39 @@ export const platformPricingRelations = relations(platformPricing, ({ one }) => 
   item: one(items, {
     fields: [platformPricing.itemId],
     references: [items.id],
+  }),
+}));
+
+// ── Platform Connections ────────────────────────────────────────────────────
+
+export const platformConnections = pgTable(
+  'platform_connections',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    restaurantId: uuid('restaurant_id')
+      .references(() => restaurants.id, { onDelete: 'cascade' })
+      .notNull(),
+    platform: text('platform').notNull(), // 'doordash', 'uber_eats'
+    externalStoreId: text('external_store_id'), // platform-specific store/merchant ID
+    credentials: jsonb('credentials').notNull(), // encrypted API keys, tokens, etc.
+    enabled: boolean('enabled').default(true).notNull(),
+    lastSyncAt: timestamp('last_sync_at'),
+    lastSyncStatus: text('last_sync_status'), // 'success', 'error', 'pending'
+    lastSyncError: text('last_sync_error'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('platform_connections_restaurant_platform_idx').on(
+      table.restaurantId,
+      table.platform,
+    ),
+  ],
+);
+
+export const platformConnectionsRelations = relations(platformConnections, ({ one }) => ({
+  restaurant: one(restaurants, {
+    fields: [platformConnections.restaurantId],
+    references: [restaurants.id],
   }),
 }));
